@@ -3,8 +3,8 @@ import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 import 'dart:io';
-import 'package:sqflite/sqflite.dart'; // 로컬 DB (SQLite) 패키지
-import 'package:path/path.dart'; // 경로 조작 패키지
+import 'package:sqflite/sqflite.dart';
+import 'package:path/path.dart';
 
 void main() {
   runApp(const MyApp());
@@ -25,6 +25,7 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
 // DBHelper 클래스: SQLite 데이터베이스 초기화 및 CRUD 기능 제공
 class DBHelper {
   static final DBHelper _instance = DBHelper._internal();
@@ -32,11 +33,8 @@ class DBHelper {
 
   DBHelper._internal();
 
-  factory DBHelper() {
-    return _instance;
-  }
+  factory DBHelper() => _instance;
 
-  // 데이터베이스 초기화
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB();
@@ -45,7 +43,7 @@ class DBHelper {
 
   Future<Database> _initDB() async {
     String dbPath = await getDatabasesPath();
-    String path = join(dbPath, 'pins.db'); // 'pins.db'라는 DB 파일 생성
+    String path = join(dbPath, 'pins.db');
 
     return await openDatabase(
       path,
@@ -62,29 +60,27 @@ class DBHelper {
             category TEXT,
             imagePath TEXT
           )
-        '''); // pins 테이블 생성
+        ''');
       },
     );
   }
 
-  // 핀 데이터를 삽입하는 함수
   Future<void> insertPin(Map<String, dynamic> pin) async {
     final db = await database;
     await db.insert('pins', pin);
   }
 
-  // 저장된 핀 데이터를 불러오는 함수
   Future<List<Map<String, dynamic>>> getPins() async {
     final db = await database;
     return await db.query('pins');
   }
 
-  // 핀 데이터를 삭제하는 함수
   Future<void> deletePin(int id) async {
     final db = await database;
     await db.delete('pins', where: 'id = ?', whereArgs: [id]);
   }
 }
+
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -92,10 +88,10 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin {
+class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   Position? _currentPosition;
-  List<Map<String, dynamic>> _journalEntries = []; // 핀 데이터 리스트
-  final DBHelper _dbHelper = DBHelper(); // DBHelper 인스턴스 생성
+  List<Map<String, dynamic>> _journalEntries = [];
+  final DBHelper _dbHelper = DBHelper();
   List<String> _mainCategories = [
     'All', '새내기', '맛집', '스터디', '건축', '예술', '공학', '상경', '인문', '놀거리', '안전'
   ];
@@ -124,9 +120,8 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     super.initState();
     _getCurrentLocation();
     _startLocationCheck();
-    _loadPinsFromDB(); // DB에서 핀 불러오기
+    _loadPinsFromDB();
 
-    // 애니메이션 초기화
     _animationController = AnimationController(
       duration: const Duration(seconds: 2),
       vsync: this,
@@ -142,7 +137,9 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     super.dispose();
   }
 
-  // 현재 위치를 가져오는 함수
+  @override
+  bool get wantKeepAlive => true;
+
   void _getCurrentLocation() async {
     bool serviceEnabled;
     LocationPermission permission;
@@ -170,23 +167,21 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     });
   }
 
-  // 1초마다 위치를 체크하는 타이머 시작
   void _startLocationCheck() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _getCurrentLocation();
       _checkForMatchingEntries();
     });
   }
-// 현재 위치와 저장된 핀을 비교하는 함수
+
   void _checkForMatchingEntries() {
     if (_currentPosition == null) return;
 
-    double thresholdDistance = 0.001; // 약 1m 이내의 거리
+    double thresholdDistance = 0.001;
 
     setState(() {
       _journalEntries = _journalEntries.where((entry) {
-        if (_selectedMainCategory != 'All' &&
-            entry['category'] != _selectedSubCategory) {
+        if (_selectedMainCategory != 'All' && entry['category'] != _selectedSubCategory) {
           return false;
         }
         double distance = (entry['latitude'] - _currentPosition!.latitude).abs() +
@@ -196,7 +191,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     });
   }
 
-  // DB에서 핀 데이터를 불러오는 함수
   Future<void> _loadPinsFromDB() async {
     List<Map<String, dynamic>> pins = await _dbHelper.getPins();
     setState(() {
@@ -204,24 +198,36 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     });
   }
 
-  // 핀 추가 함수 (DB 저장 포함)
   void _addNewPin(Map<String, dynamic> pin) async {
     await _dbHelper.insertPin(pin);
-    setState(() {
-      _journalEntries.add(pin);
-    });
+    _loadPinsFromDB(); // DB에서 다시 로드하여 UI 갱신
   }
 
-  // 핀 삭제 함수 (DB 삭제 포함)
   void _deletePin(int index) async {
     int id = _journalEntries[index]['id'];
     await _dbHelper.deletePin(id);
-    setState(() {
-      _journalEntries.removeAt(index);
-    });
+    _loadPinsFromDB(); // 삭제 후 DB에서 다시 로드하여 UI 갱신
   }
+
+  void _navigateToAddEntry(BuildContext buildContext) {
+    print('Add Entry 버튼이 눌렸습니다.');
+    Navigator.push(
+      buildContext, // 상위에서 전달된 BuildContext 사용
+      MaterialPageRoute(
+        builder: (context) => AddEntryPage(
+          currentPosition: _currentPosition,
+          mainCategories: _mainCategories,
+          subCategories: _subCategories,
+          onSave: _addNewPin,
+        ),
+      ),
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin을 사용할 때 필요
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -235,7 +241,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       ),
       body: Column(
         children: [
-          // 메인 카테고리 선택 탭
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -257,8 +262,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             ),
           ),
           const SizedBox(height: 10),
-
-          // 서브 카테고리 선택 탭
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: Row(
@@ -279,8 +282,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
             ),
           ),
           const SizedBox(height: 10),
-
-          // 핀 목록 표시
           Expanded(
             child: _currentPosition == null
                 ? const Center(child: CircularProgressIndicator())
@@ -312,29 +313,15 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _navigateToAddEntry,
+        onPressed: () => _navigateToAddEntry(context),
         tooltip: 'Add Entry',
         backgroundColor: Colors.pink,
         child: const Icon(Icons.pin_drop),
       ),
     );
   }
-
-  // 새로운 핀 추가 화면으로 이동
-  void _navigateToAddEntry() {
-    Navigator.push(
-      context as BuildContext,
-      MaterialPageRoute(
-        builder: (context) => AddEntryPage(
-          currentPosition: _currentPosition,
-          mainCategories: _mainCategories,
-          subCategories: _subCategories,
-          onSave: _addNewPin, // 핀 저장 시 _addNewPin 호출
-        ),
-      ),
-    );
-  }
 }
+
 class AddEntryPage extends StatefulWidget {
   final Position? currentPosition;
   final List<String> mainCategories;
@@ -361,8 +348,20 @@ class _AddEntryPageState extends State<AddEntryPage> {
   String _selectedMainCategory = 'All';
   String _selectedSubCategory = '자유';
 
-  void _saveEntry() async {
-    if (widget.currentPosition == null) return;
+  void _saveEntry(BuildContext buildContext) async {
+    if (widget.currentPosition == null) {
+      ScaffoldMessenger.of(buildContext).showSnackBar(
+        const SnackBar(content: Text('위치 정보를 가져올 수 없습니다.')),
+      );
+      return;
+    }
+
+    if (_titleController.text.isEmpty || _placeNameController.text.isEmpty) {
+      ScaffoldMessenger.of(buildContext).showSnackBar(
+        const SnackBar(content: Text('제목과 장소 이름을 입력하세요.')),
+      );
+      return;
+    }
 
     var newEntry = {
       'title': _titleController.text,
@@ -376,13 +375,11 @@ class _AddEntryPageState extends State<AddEntryPage> {
 
     widget.onSave(newEntry);
 
-    // 비동기 작업 이후 mounted 상태 확인 후 pop 호출
     if (mounted) {
-      Navigator.pop(context as BuildContext); // 이전 화면으로 돌아가기
+      Navigator.pop(buildContext); // 올바른 BuildContext 사용
     }
   }
 
-  // 이미지 선택 함수
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
@@ -399,7 +396,7 @@ class _AddEntryPageState extends State<AddEntryPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: _saveEntry,
+            onPressed: () => _saveEntry(context),
           ),
         ],
       ),
@@ -481,6 +478,7 @@ class _AddEntryPageState extends State<AddEntryPage> {
     );
   }
 }
+
 class ViewEntryPage extends StatelessWidget {
   final Map<String, dynamic> entry;
 
