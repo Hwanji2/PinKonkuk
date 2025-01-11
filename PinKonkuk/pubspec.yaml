@@ -14,6 +14,8 @@ dependencies:
     sdk: flutter
   geolocator: ^9.0.2 # For accessing real-time GPS data.
   image_picker: ^1.0.0 # For selecting and uploading images.
+  sqflite: ^2.2.8+3 # For SQLite database management.
+  path: ^1.8.3 # For file path manipulation.
   cupertino_icons: ^1.0.2
 
 dev_dependencies:
@@ -23,5 +25,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-
-

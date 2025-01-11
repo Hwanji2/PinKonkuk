@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:image_picker/image_picker.dart'; // 사진 업로드를 위한 패키지
+import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 import 'dart:io';
+import 'package:sqflite/sqflite.dart'; // 로컬 DB (SQLite) 패키지
+import 'package:path/path.dart'; // 경로 조작 패키지
 
 void main() {
   runApp(const MyApp());
@@ -23,6 +25,66 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+// DBHelper 클래스: SQLite 데이터베이스 초기화 및 CRUD 기능 제공
+class DBHelper {
+  static final DBHelper _instance = DBHelper._internal();
+  static Database? _database;
+
+  DBHelper._internal();
+
+  factory DBHelper() {
+    return _instance;
+  }
+
+  // 데이터베이스 초기화
+  Future<Database> get database async {
+    if (_database != null) return _database!;
+    _database = await _initDB();
+    return _database!;
+  }
+
+  Future<Database> _initDB() async {
+    String dbPath = await getDatabasesPath();
+    String path = join(dbPath, 'pins.db'); // 'pins.db'라는 DB 파일 생성
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        await db.execute('''
+          CREATE TABLE pins (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT,
+            note TEXT,
+            placeName TEXT,
+            latitude REAL,
+            longitude REAL,
+            category TEXT,
+            imagePath TEXT
+          )
+        '''); // pins 테이블 생성
+      },
+    );
+  }
+
+  // 핀 데이터를 삽입하는 함수
+  Future<void> insertPin(Map<String, dynamic> pin) async {
+    final db = await database;
+    await db.insert('pins', pin);
+  }
+
+  // 저장된 핀 데이터를 불러오는 함수
+  Future<List<Map<String, dynamic>>> getPins() async {
+    final db = await database;
+    return await db.query('pins');
+  }
+
+  // 핀 데이터를 삭제하는 함수
+  Future<void> deletePin(int id) async {
+    final db = await database;
+    await db.delete('pins', where: 'id = ?', whereArgs: [id]);
+  }
+}
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -32,7 +94,8 @@ class MainPage extends StatefulWidget {
 
 class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin {
   Position? _currentPosition;
-  List<Map<String, dynamic>> _journalEntries = [];
+  List<Map<String, dynamic>> _journalEntries = []; // 핀 데이터 리스트
+  final DBHelper _dbHelper = DBHelper(); // DBHelper 인스턴스 생성
   List<String> _mainCategories = [
     'All', '새내기', '맛집', '스터디', '건축', '예술', '공학', '상경', '인문', '놀거리', '안전'
   ];
@@ -61,6 +124,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     super.initState();
     _getCurrentLocation();
     _startLocationCheck();
+    _loadPinsFromDB(); // DB에서 핀 불러오기
 
     // 애니메이션 초기화
     _animationController = AnimationController(
@@ -77,6 +141,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     _animationController.dispose();
     super.dispose();
   }
+
   // 현재 위치를 가져오는 함수
   void _getCurrentLocation() async {
     bool serviceEnabled;
@@ -112,8 +177,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       _checkForMatchingEntries();
     });
   }
-
-  // 현재 위치와 저장된 위치를 비교하여 가까운 장소를 표시하는 함수
+// 현재 위치와 저장된 핀을 비교하는 함수
   void _checkForMatchingEntries() {
     if (_currentPosition == null) return;
 
@@ -121,7 +185,8 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
     setState(() {
       _journalEntries = _journalEntries.where((entry) {
-        if (_selectedMainCategory != 'All' && entry['category'] != _selectedSubCategory) {
+        if (_selectedMainCategory != 'All' &&
+            entry['category'] != _selectedSubCategory) {
           return false;
         }
         double distance = (entry['latitude'] - _currentPosition!.latitude).abs() +
@@ -130,121 +195,142 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       }).toList();
     });
   }
-  void _navigateToAddEntry() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AddEntryPage(
-          currentPosition: _currentPosition,
-          mainCategories: _mainCategories,
-          subCategories: _subCategories,
-          onSave: (entry) {
-            setState(() {
-              _journalEntries.add(entry);
-            });
-          },
-        ),
-      ),
-    );
+
+  // DB에서 핀 데이터를 불러오는 함수
+  Future<void> _loadPinsFromDB() async {
+    List<Map<String, dynamic>> pins = await _dbHelper.getPins();
+    setState(() {
+      _journalEntries = pins;
+    });
   }
 
+  // 핀 추가 함수 (DB 저장 포함)
+  void _addNewPin(Map<String, dynamic> pin) async {
+    await _dbHelper.insertPin(pin);
+    setState(() {
+      _journalEntries.add(pin);
+    });
+  }
+
+  // 핀 삭제 함수 (DB 삭제 포함)
+  void _deletePin(int index) async {
+    int id = _journalEntries[index]['id'];
+    await _dbHelper.deletePin(id);
+    setState(() {
+      _journalEntries.removeAt(index);
+    });
+  }
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-        appBar: AppBar(
+      appBar: AppBar(
         title: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-        Text('Pin', style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold)),
-    Text('Konkuk', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
-    ],
-    ),
-    centerTitle: true,
-    ),
-    body: Column(
-    children: [
-    // 메인 카테고리 선택 탭
-    SingleChildScrollView(
-    scrollDirection: Axis.horizontal,
-    child: Row(
-    children: _mainCategories.map((mainCategory) {
-    return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 8.0),
-    child: ChoiceChip(
-    label: Text(mainCategory),
-    selected: _selectedMainCategory == mainCategory,
-    onSelected: (bool selected) {
-    setState(() {
-    _selectedMainCategory = mainCategory;
-    _selectedSubCategory = _subCategories[mainCategory]!.first;
-    });
-    },
-    ),
-    );
-    }).toList(),
-    ),
-    ),
-    const SizedBox(height: 10),
-      // 서브 카테고리 선택 탭
-      SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: _subCategories[_selectedMainCategory]!.map((subCategory) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
-              child: ChoiceChip(
-                label: Text(subCategory),
-                selected: _selectedSubCategory == subCategory,
-                onSelected: (bool selected) {
-                  setState(() {
-                    _selectedSubCategory = subCategory;
-                  });
-                },
-              ),
-            );
-          }).toList(),
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text('Pin', style: TextStyle(color: Colors.pink, fontWeight: FontWeight.bold)),
+            Text('Konkuk', style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold)),
+          ],
         ),
+        centerTitle: true,
       ),
-      const SizedBox(height: 10),
-      Expanded(
-        child: _currentPosition == null
-            ? const Center(child: CircularProgressIndicator())
-            : ListView.builder(
-          itemCount: _journalEntries.length,
-          itemBuilder: (context, index) {
-            var entry = _journalEntries[index];
-            return ListTile(
-              title: Text(entry['title']),
-              subtitle: Text(
-                '${entry['placeName']} - ${entry['category']}\nLat: ${entry['latitude']}, Lng: ${entry['longitude']}',
-              ),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ViewEntryPage(entry: entry),
+      body: Column(
+        children: [
+          // 메인 카테고리 선택 탭
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _mainCategories.map((mainCategory) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: ChoiceChip(
+                    label: Text(mainCategory),
+                    selected: _selectedMainCategory == mainCategory,
+                    onSelected: (bool selected) {
+                      setState(() {
+                        _selectedMainCategory = mainCategory;
+                        _selectedSubCategory = _subCategories[mainCategory]!.first;
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 서브 카테고리 선택 탭
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _subCategories[_selectedMainCategory]!.map((subCategory) {
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: ChoiceChip(
+                    label: Text(subCategory),
+                    selected: _selectedSubCategory == subCategory,
+                    onSelected: (bool selected) {
+                      setState(() {
+                        _selectedSubCategory = subCategory;
+                      });
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 10),
+
+          // 핀 목록 표시
+          Expanded(
+            child: _currentPosition == null
+                ? const Center(child: CircularProgressIndicator())
+                : ListView.builder(
+              itemCount: _journalEntries.length,
+              itemBuilder: (context, index) {
+                var entry = _journalEntries[index];
+                return ListTile(
+                  title: Text(entry['title']),
+                  subtitle: Text(
+                    '${entry['placeName']} - ${entry['category']}\nLat: ${entry['latitude']}, Lng: ${entry['longitude']}',
+                  ),
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ViewEntryPage(entry: entry),
+                      ),
+                    );
+                  },
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete, color: Colors.red),
+                    onPressed: () => _deletePin(index),
                   ),
                 );
               },
-              trailing: Checkbox(
-                value: false,
-                onChanged: (bool? value) {
-                  setState(() {
-                    _journalEntries.removeAt(index);
-                  });
-                },
-              ),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
-    ],
-    ),
       floatingActionButton: FloatingActionButton(
         onPressed: _navigateToAddEntry,
         tooltip: 'Add Entry',
         backgroundColor: Colors.pink,
         child: const Icon(Icons.pin_drop),
+      ),
+    );
+  }
+
+  // 새로운 핀 추가 화면으로 이동
+  void _navigateToAddEntry() {
+    Navigator.push(
+      context as BuildContext,
+      MaterialPageRoute(
+        builder: (context) => AddEntryPage(
+          currentPosition: _currentPosition,
+          mainCategories: _mainCategories,
+          subCategories: _subCategories,
+          onSave: _addNewPin, // 핀 저장 시 _addNewPin 호출
+        ),
       ),
     );
   }
@@ -275,7 +361,7 @@ class _AddEntryPageState extends State<AddEntryPage> {
   String _selectedMainCategory = 'All';
   String _selectedSubCategory = '자유';
 
-  void _saveEntry() {
+  void _saveEntry() async {
     if (widget.currentPosition == null) return;
 
     var newEntry = {
@@ -284,14 +370,19 @@ class _AddEntryPageState extends State<AddEntryPage> {
       'placeName': _placeNameController.text,
       'latitude': widget.currentPosition!.latitude,
       'longitude': widget.currentPosition!.longitude,
-      'image': _image,
       'category': _selectedSubCategory,
+      'imagePath': _image?.path ?? '',
     };
 
     widget.onSave(newEntry);
-    Navigator.pop(context);
+
+    // 비동기 작업 이후 mounted 상태 확인 후 pop 호출
+    if (mounted) {
+      Navigator.pop(context as BuildContext); // 이전 화면으로 돌아가기
+    }
   }
 
+  // 이미지 선택 함수
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
@@ -299,6 +390,7 @@ class _AddEntryPageState extends State<AddEntryPage> {
       _image = image;
     });
   }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -418,13 +510,12 @@ class ViewEntryPage extends StatelessWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-            entry['image'] == null
+            entry['imagePath'] == null || entry['imagePath'].isEmpty
                 ? const Text('이미지가 없습니다.')
-                : Image.file(File(entry['image'].path)),
+                : Image.file(File(entry['imagePath'])),
           ],
         ),
       ),
     );
   }
 }
-
