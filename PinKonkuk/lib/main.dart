@@ -177,13 +177,21 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   void _checkForMatchingEntries() {
     if (_currentPosition == null) return;
 
-    double thresholdDistance = 0.001;
+    double thresholdDistance = 0.001; // 약 1m 이내의 거리
 
     setState(() {
       _journalEntries = _journalEntries.where((entry) {
-        if (_selectedMainCategory != 'All' && entry['category'] != _selectedSubCategory) {
+        // "자유" 또는 "All" 선택 시 모든 항목을 보여줌
+        if (_selectedMainCategory == 'All' || _selectedSubCategory == '자유') {
+          return true;
+        }
+
+        // 카테고리가 일치하지 않으면 제외
+        if (entry['category'] != _selectedSubCategory) {
           return false;
         }
+
+        // 위치가 thresholdDistance 이내인지 비교
         double distance = (entry['latitude'] - _currentPosition!.latitude).abs() +
             (entry['longitude'] - _currentPosition!.longitude).abs();
         return distance < thresholdDistance;
@@ -199,9 +207,10 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   }
 
   void _addNewPin(Map<String, dynamic> pin) async {
-    await _dbHelper.insertPin(pin);
-    _loadPinsFromDB(); // DB에서 다시 로드하여 UI 갱신
+    await _dbHelper.insertPin(pin); // DB에 핀 추가
+    await _loadPinsFromDB();        // DB에서 데이터를 다시 불러와 UI 갱신
   }
+
 
   void _deletePin(int index) async {
     int id = _journalEntries[index]['id'];
@@ -219,6 +228,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
           mainCategories: _mainCategories,
           subCategories: _subCategories,
           onSave: _addNewPin,
+          parentContext: buildContext, // BuildContext 전달
         ),
       ),
     );
@@ -327,6 +337,7 @@ class AddEntryPage extends StatefulWidget {
   final List<String> mainCategories;
   final Map<String, List<String>> subCategories;
   final Function(Map<String, dynamic>) onSave;
+  final BuildContext parentContext; // 상위 BuildContext
 
   const AddEntryPage({
     super.key,
@@ -334,6 +345,7 @@ class AddEntryPage extends StatefulWidget {
     required this.mainCategories,
     required this.subCategories,
     required this.onSave,
+    required this.parentContext, // BuildContext 초기화
   });
 
   @override
@@ -348,16 +360,16 @@ class _AddEntryPageState extends State<AddEntryPage> {
   String _selectedMainCategory = 'All';
   String _selectedSubCategory = '자유';
 
-  void _saveEntry(BuildContext buildContext) async {
+  void _saveEntry() async {
     if (widget.currentPosition == null) {
-      ScaffoldMessenger.of(buildContext).showSnackBar(
+      ScaffoldMessenger.of(widget.parentContext).showSnackBar(
         const SnackBar(content: Text('위치 정보를 가져올 수 없습니다.')),
       );
       return;
     }
 
     if (_titleController.text.isEmpty || _placeNameController.text.isEmpty) {
-      ScaffoldMessenger.of(buildContext).showSnackBar(
+      ScaffoldMessenger.of(widget.parentContext).showSnackBar(
         const SnackBar(content: Text('제목과 장소 이름을 입력하세요.')),
       );
       return;
@@ -376,9 +388,10 @@ class _AddEntryPageState extends State<AddEntryPage> {
     widget.onSave(newEntry);
 
     if (mounted) {
-      Navigator.pop(buildContext); // 올바른 BuildContext 사용
+      Navigator.pop(widget.parentContext); // 상위 BuildContext로 화면 닫기
     }
   }
+
 
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
@@ -396,7 +409,7 @@ class _AddEntryPageState extends State<AddEntryPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.save),
-            onPressed: () => _saveEntry(context),
+            onPressed: () => _saveEntry(),
           ),
         ],
       ),
