@@ -17,7 +17,8 @@ dependencies:
   sqflite: ^2.2.8+3 # For SQLite database management.
   sqflite_common_ffi: ^2.0.0 # For desktop and testing environments.
   path: ^1.8.3 # For file path manipulation.
-  cupertino_icons: ^1.0.2
+  cupertino_icons: ^1.0.2 # For Cupertino widgets
+  google_maps_flutter: ^2.1.1 # For Google Maps integration
 
 dev_dependencies:
   flutter_test:
