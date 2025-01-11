@@ -1,0 +1,27 @@
+name: pinkonkuk
+
+description: "A new Flutter project focused on location-based journaling."
+
+publish_to: 'none' # Prevent accidental publishing to pub.dev.
+
+version: 1.0.1+2
+
+environment:
+  sdk: '>=3.2.3 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  geolocator: ^9.0.2 # For accessing real-time GPS data.
+  image_picker: ^1.0.0 # For selecting and uploading images.
+  cupertino_icons: ^1.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^2.0.0
+
+flutter:
+  uses-material-design: true
+
+
