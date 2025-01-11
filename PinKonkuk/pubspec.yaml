@@ -15,6 +15,7 @@ dependencies:
   geolocator: ^9.0.2 # For accessing real-time GPS data.
   image_picker: ^1.0.0 # For selecting and uploading images.
   sqflite: ^2.2.8+3 # For SQLite database management.
+  sqflite_common_ffi: ^2.0.0 # For desktop and testing environments.
   path: ^1.8.3 # For file path manipulation.
   cupertino_icons: ^1.0.2
 

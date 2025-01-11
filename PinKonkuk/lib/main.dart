@@ -5,9 +5,39 @@ import 'dart:async';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
 
 void main() {
+// 데스크톱 환경에서 sqflite 초기화
+  sqfliteFfiInit(); // sqflite_common_ffi 초기화
+  databaseFactory = databaseFactoryFfi; // databaseFactory 설정
   runApp(const MyApp());
+}
+Future<Database> _initDB() async {
+  String dbPath = await getDatabasesPath();
+  String path = join(dbPath, 'pins.db');
+  print('DB 파일 경로: $path'); // 디버그 출력
+
+  return await openDatabase(
+    path,
+    version: 1,
+    onCreate: (db, version) async {
+      print('DB 테이블 생성 완료'); // 디버그 출력
+      await db.execute('''
+        CREATE TABLE pins (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT,
+          note TEXT,
+          placeName TEXT,
+          latitude REAL,
+          longitude REAL,
+          category TEXT,
+          imagePath TEXT
+        )
+      ''');
+    },
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -64,11 +94,12 @@ class DBHelper {
       },
     );
   }
-
   Future<void> insertPin(Map<String, dynamic> pin) async {
     final db = await database;
-    await db.insert('pins', pin);
+    int result = await db.insert('pins', pin);
+    print('DB에 핀 추가: $pin, 결과: $result'); // 디버그 출력
   }
+
 
   Future<List<Map<String, dynamic>>> getPins() async {
     final db = await database;
@@ -146,6 +177,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      print('위치 서비스가 비활성화되어 있습니다.');
       return Future.error('위치 서비스가 비활성화되어 있습니다.');
     }
 
@@ -153,15 +185,18 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        print('위치 권한이 거부되었습니다.');
         return Future.error('위치 권한이 거부되었습니다.');
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
+      print('위치 권한이 영구적으로 거부되었습니다.');
       return Future.error('위치 권한이 영구적으로 거부되었습니다.');
     }
 
     Position position = await Geolocator.getCurrentPosition();
+    print('현재 위치: Lat=${position.latitude}, Lng=${position.longitude}'); // 디버그 출력
     setState(() {
       _currentPosition = position;
     });
@@ -173,7 +208,6 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       _checkForMatchingEntries();
     });
   }
-
   void _checkForMatchingEntries() {
     if (_currentPosition == null) return;
 
@@ -181,17 +215,17 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
 
     setState(() {
       _journalEntries = _journalEntries.where((entry) {
-        // "자유" 또는 "All" 선택 시 모든 항목을 보여줌
-        if (_selectedMainCategory == 'All' || _selectedSubCategory == '자유') {
+        // "자유" 선택 시 모든 항목 표시
+        if (_selectedSubCategory == '자유') {
           return true;
         }
 
-        // 카테고리가 일치하지 않으면 제외
-        if (entry['category'] != _selectedSubCategory) {
+        // 카테고리와 위치가 일치하는 항목만 표시
+        if (_selectedMainCategory != 'All' &&
+            entry['category'] != _selectedSubCategory) {
           return false;
         }
 
-        // 위치가 thresholdDistance 이내인지 비교
         double distance = (entry['latitude'] - _currentPosition!.latitude).abs() +
             (entry['longitude'] - _currentPosition!.longitude).abs();
         return distance < thresholdDistance;
@@ -199,11 +233,39 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
     });
   }
 
+
   Future<void> _loadPinsFromDB() async {
     List<Map<String, dynamic>> pins = await _dbHelper.getPins();
+    print('DB에서 불러온 핀 데이터: $pins'); // 디버그 출력
     setState(() {
       _journalEntries = pins;
     });
+  }
+
+  Future<Database> _initDB() async {
+    String dbPath = await getDatabasesPath();
+    String path = join(dbPath, 'pins.db');
+    print('DB 경로: $path'); // 디버그 출력
+
+    return await openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, version) async {
+        print('DB 테이블 생성');
+        await db.execute('''
+        CREATE TABLE pins (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT,
+          note TEXT,
+          placeName TEXT,
+          latitude REAL,
+          longitude REAL,
+          category TEXT,
+          imagePath TEXT
+        )
+      ''');
+      },
+    );
   }
 
   void _addNewPin(Map<String, dynamic> pin) async {
