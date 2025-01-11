@@ -282,7 +282,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
   }
 
   void _navigateToAddEntry(BuildContext buildContext) {
-    print('Add Entry 버튼이 눌렸습니다.');
+    print('Add Pin 버튼이 눌렸습니다.');
     Navigator.push(
       buildContext, // 상위에서 전달된 BuildContext 사용
       MaterialPageRoute(
@@ -387,7 +387,7 @@ class _MainPageState extends State<MainPage> with SingleTickerProviderStateMixin
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _navigateToAddEntry(context),
-        tooltip: 'Add Entry',
+        tooltip: '핀 추가',
         backgroundColor: Colors.pink,
         child: const Icon(Icons.pin_drop),
       ),
