@@ -1,5 +1,6 @@
 # PinKonkuk
 
+[![실행 영상](https://youtu.be/rcUROVCI6xY?feature=shared)
 
 Flutter 기반 장소 기록 애플리케이션 **PinKonkuk**은 
 건국대학교 학생들이 캠퍼스 공간에 가상의 메모를 남길 수 있도록 하기 위해 만든 애플리케이션이며
